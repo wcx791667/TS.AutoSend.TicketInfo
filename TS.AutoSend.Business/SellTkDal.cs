@@ -18,10 +18,11 @@ namespace TS.AutoSend.Business
     {
         private readonly ILog _logger = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
         Database db = DatabaseFactory.CreateDatabase("1");
+
         public List<TicketInfo> GetTicketInfo(string carryStaId)
         {
             DataTable dt;
-            List<TicketInfo> list = new List<TicketInfo>();
+             List<TicketInfo> list = new List<TicketInfo>();
             try
             {
                 string sql = string.Format(@"select  * from  SpTicket_View  where datediff(minute,售票时间,getdate())<=5");
@@ -30,7 +31,7 @@ namespace TS.AutoSend.Business
                 {
                     TicketInfo ticket = new TicketInfo();
 
-                    ticket.xm = dr["姓名"].ToString().Trim();
+                    ticket.xm = dr["姓名"].ToString().Trim().Replace("\n","").Replace("\r","");
                     ticket.idcardtype = "11";
                     ticket.idcard = dr["身份证"].ToString().Trim();
                     string sexFlag = ticket.idcard.Length == 15 ? ticket.idcard.Substring(14, 1) : ticket.idcard.Substring(16, 1);
@@ -44,7 +45,7 @@ namespace TS.AutoSend.Business
                     }
                     ticket.people = "";
                     ticket.birthday = ticket.idcard.Substring(6, 8);
-                    ticket.tel = "13000000000";
+                    ticket.tel = "";
                     ticket.address = "";
                     ticket.dept = "";
                     ticket.vpstartdate = "19000314122000";
@@ -54,7 +55,10 @@ namespace TS.AutoSend.Business
                     ticket.startstation = dr["所属站"].ToString().Trim();
                     ticket.endstation = dr["站点名"].ToString().Trim();
                     //"buydate":"20170909 16:52:33:5233"
-                    ticket.departdate = Convert.ToDateTime(dr["发车日期"].ToString()).ToString("yyyy-MM-dd HH:mm:ss").Replace("-", "").Replace(" ", "").Replace(":", "");
+                    //2017 03 14 12 20 00
+                    string drvDate = Convert.ToDateTime(dr["发车日期"].ToString()).ToString("yyyy-MM-dd").Replace("-", "");
+                    string schId = dr["车次"].ToString().Trim();
+                    ticket.departdate = GetTickeDrvTime(schId, drvDate);
                     ticket.buydate = Convert.ToDateTime(dr["售票时间"].ToString()).ToString("yyyy-MM-dd HH:mm:ss").Replace("-", "").Replace(" ", "").Replace(":", ""); ;
                     list.Add(ticket);
                 }
@@ -65,6 +69,30 @@ namespace TS.AutoSend.Business
                 throw new Exception(ex.Message);
             }
         }
+
+
+        public string GetTickeDrvTime(string schId,string drvDate )
+        {
+            DataTable dt;
+            try
+            {
+                string result = "";
+                string drvTime = "";
+                string sql = "select  top 1 convert(varchar(5),a.发车时间,108) drvTime  from  " + "tempdb.dbo.cc"+ drvDate+"  as a  where  a.车次=" + "'" + schId + "'";
+                dt = db.ExecuteDataSet(CommandType.Text, sql).Tables[0];
+                foreach (DataRow dr in dt.Rows)
+                {
+                    drvTime = dr["drvTime"].ToString().Trim();
+                }
+                result = drvDate + drvTime.Trim().Replace(":", "")+"00";
+                return result;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception(ex.Message);
+            }
+        }
+
 
         public static string Post(string url, byte[] data)
         {
@@ -88,7 +116,7 @@ namespace TS.AutoSend.Business
         {
             _logger.Info($"同步车票信息开始：{DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")}");
             HttpClient _httpClient = new HttpClient();
-            string ApiUrl = "http://www.baidu.com";
+            string ApiUrl = "http://124.112.209.58:8089/scpt/smgp/add";
             //第一步获取token
             _httpClient.BaseAddress = new Uri(ApiUrl);
 
@@ -105,9 +133,10 @@ namespace TS.AutoSend.Business
                     //string result2 = Encrpt.encrypt(psgStrlist, key);
                     //var x22 = Encrpt.decrypt(result2, key);
 
+                    //_logger.Info($"车票信息:" + psgStrlist);
+
                     string postdata = SecurityHelper.Encode(psgStrlist);
-                    //var x2 = SecurityHelper.Decode(postdata);
-                    string postString = "systemcode=012345&systemname=测试系统&key=0&qybm=0123&info=" + postdata;
+                    string postString = "systemcode=XCJTZWGLXT&systemname=宣城敬亭站务管理系统&key=0&qybm=N003418250001&info=" + postdata;
                     byte[] gopost = Encoding.UTF8.GetBytes(postString);
                     string backResult = Post(ApiUrl, gopost);
 
